@@ -1,0 +1,362 @@
+# Roastery OS - React/Next.js Frontend
+
+## Project Overview
+Coffee roastery ERP system built with Next.js 15, React 19, TypeScript, and shadcn/ui.
+
+## Tech Stack
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript 5
+- **UI Library**: shadcn/ui (Radix UI + Tailwind CSS)
+- **State Management**: Zustand
+- **Styling**: Tailwind CSS v4
+- **Icons**: Lucide React
+- **Forms**: React Hook Form + Zod
+- **Toasts**: Sonner
+- **HTTP Client**: Native Fetch API
+
+## Project Structure
+```
+roastery-frontend-react/
+├── app/                      # Next.js App Router
+│   ├── layout.tsx           # Root layout with providers
+│   ├── page.tsx             # Home page (redirects)
+│   ├── login/               # Login page
+│   ├── register/            # Registration page
+│   └── dashboard/           # Dashboard pages
+│       ├── layout.tsx       # Dashboard layout
+│       └── page.tsx         # Dashboard home
+├── components/
+│   ├── ui/                  # shadcn/ui components
+│   └── providers/           # React providers
+├── lib/
+│   ├── hooks/               # Custom React hooks
+│   ├── stores/              # Zustand stores
+│   ├── config/              # Configuration
+│   └── utils.ts             # Utility functions
+├── types/                   # TypeScript type definitions
+└── middleware.ts            # Next.js middleware
+```
+
+## Key Patterns
+
+### State Management (Zustand)
+- Global state in `lib/stores/`
+- Use selectors for optimization
+- Example: `useAuthStore((state) => state.user)`
+
+### Custom Hooks
+- Located in `lib/hooks/`
+- Encapsulate business logic
+- Example: `useAuth()` for authentication
+
+### Page Structure
+- Client components: Add `'use client'` directive
+- Server components: Default (no directive needed)
+- Use layouts for shared UI
+
+### Routing
+- File-based routing in `app/` directory
+- Dynamic routes: `[id]/page.tsx`
+- Route groups: `(group)/page.tsx`
+
+## Important Conventions
+
+### Component Naming
+- PascalCase for components: `DashboardLayout.tsx`
+- camelCase for hooks: `use-auth.ts`
+- kebab-case for stores: `auth-store.ts`
+
+### Import Aliases
+- Use `@/` for absolute imports
+- Example: `@/components/ui/button`
+
+### TypeScript
+- Strict mode enabled
+- Define interfaces in `types/` directory
+- Use type inference where possible
+
+## API Integration
+- Base URL: `process.env.NEXT_PUBLIC_API_BASE`
+- Authentication: JWT tokens stored in cookies
+- Token parsed for user info (role, tenant_id, etc.)
+
+## Authentication Flow
+1. User logs in → Token stored in cookie
+2. Token parsed → User info extracted
+3. Zustand store updated with user state
+4. Middleware protects dashboard routes
+5. AuthProvider initializes on app mount
+
+## shadcn/ui Components
+All UI components are in `components/ui/`:
+- Button, Input, Card, Badge, Alert
+- Form components with validation
+- Accordion, Avatar, Progress
+- Dropdown menus, Select, Switch
+- Dialog (modals with header/footer)
+- Sheet (mobile slide-out menu)
+- Toast notifications via Sonner
+
+## Environment Variables
+Required in `.env.local`:
+```
+NEXT_PUBLIC_API_BASE=http://localhost:8080
+```
+
+## Development Commands
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm start        # Run production server
+npm run lint     # Run ESLint
+```
+
+## Key Features Implemented
+- ✅ Authentication (login/logout/register)
+- ✅ Protected routes (middleware)
+- ✅ Dashboard layout with desktop & mobile navigation
+- ✅ Real-time dashboard statistics
+- ✅ Inventory management (full CRUD)
+- ✅ Production batch management (full CRUD)
+- ✅ Interactive batch operations (finish roasting, submit QC)
+- ✅ Finance cost tracking and reporting (HPP, variance)
+- ✅ User management (full CRUD) - admin only
+  - ✅ Add new users (Owner only)
+  - ✅ Edit user roles (Owner only)
+  - ✅ Delete users (Owner only, with self-deletion prevention)
+  - ✅ List and search users
+- ✅ User role-based access control
+- ✅ Mobile hamburger menu with Sheet component
+- ✅ Dialog modals for all interactive operations
+- ✅ Toast notifications
+- ✅ Fully responsive design
+- ✅ Type-safe API calls
+- ✅ **PRODUCTION READY** (January 2026)
+
+## Migration Notes
+This project was migrated from Nuxt/Vue:
+- Pinia → Zustand
+- Vue Composables → React Hooks
+- Nuxt UI → shadcn/ui
+- Nuxt Middleware → Next.js Middleware
+- See MIGRATION_GUIDE.md for details
+
+## Best Practices
+1. Use server components by default
+2. Add `'use client'` only when needed (hooks, events)
+3. Keep components small and focused
+4. Use TypeScript strictly
+5. Follow shadcn/ui patterns
+6. Extract logic into custom hooks
+7. Use Zustand for global state
+8. Validate forms with Zod
+9. Handle errors gracefully
+10. Write semantic HTML
+
+## Common Patterns
+
+### Protected Page
+```tsx
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuthStore } from '@/lib/stores/auth-store'
+
+export default function ProtectedPage() {
+  const router = useRouter()
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login')
+    }
+  }, [isAuthenticated, router])
+
+  if (!isAuthenticated) return null
+
+  return <div>Protected Content</div>
+}
+```
+
+### Form with Validation
+```tsx
+'use client'
+
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+const schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8)
+})
+
+export function LoginForm() {
+  const form = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { email: '', password: '' }
+  })
+
+  const onSubmit = (data: z.infer<typeof schema>) => {
+    // Handle submission
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input type="email" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit">Submit</Button>
+      </form>
+    </Form>
+  )
+}
+```
+
+### API Call with Error Handling
+```tsx
+const { login } = useAuth()
+
+try {
+  const result = await login(email, password)
+  if (result.success) {
+    router.push('/dashboard')
+  } else {
+    toast.error(result.error)
+  }
+} catch (error) {
+  toast.error('An unexpected error occurred')
+}
+```
+
+### Dialog with Form Submission
+```tsx
+'use client'
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
+export function EditDialog() {
+  const [open, setOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async () => {
+    try {
+      setSubmitting(true)
+      const response = await fetch('/api/endpoint', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
+      })
+
+      if (!response.ok) throw new Error('Failed')
+
+      toast.success('Success!')
+      setOpen(false)
+      // Refresh data
+    } catch (error) {
+      toast.error('Error occurred')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Item</DialogTitle>
+        </DialogHeader>
+        <Input />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={submitting}>
+            {submitting ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+```
+
+### Mobile Menu with Sheet
+```tsx
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Menu } from 'lucide-react'
+
+export function MobileNav() {
+  const [open, setOpen] = useState(false)
+
+  // Close on route change
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="md:hidden">
+          <Menu className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-72">
+        <SheetHeader>
+          <SheetTitle>Navigation</SheetTitle>
+        </SheetHeader>
+        {/* Navigation content */}
+      </SheetContent>
+    </Sheet>
+  )
+}
+```
+
+## Implementation Status
+
+### ✅ Completed Features
+1. ✅ Authentication system (login/logout/register)
+2. ✅ Dashboard with real-time statistics
+3. ✅ Inventory management (full CRUD)
+4. ✅ Production batch management (full CRUD)
+5. ✅ Interactive batch operations (finish roasting, submit QC)
+6. ✅ Finance cost tracking and reporting
+7. ✅ User management (full CRUD) - admin only
+8. ✅ Mobile navigation with hamburger menu
+9. ✅ Role-based access control
+10. ✅ Responsive design (mobile + desktop)
+
+### Optional Enhancements
+1. Charts/analytics for dashboard and reports
+2. Notification center
+3. Activity logs/audit trail
+4. Export functionality (CSV, PDF)
+5. Advanced filtering and sorting
+6. Multi-language support (i18n)
+7. Dark mode theme
+8. Deploy to production
+
+## Resources
+- [Next.js Docs](https://nextjs.org/docs)
+- [shadcn/ui](https://ui.shadcn.com/)
+- [Zustand](https://docs.pmnd.rs/zustand)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [TypeScript](https://www.typescriptlang.org/)
