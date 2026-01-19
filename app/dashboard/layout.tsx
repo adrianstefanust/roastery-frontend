@@ -48,7 +48,7 @@ export default function DashboardLayout({
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/dashboard/inventory/lots', label: 'Inventory', icon: Package },
+    { href: '/dashboard/inventory/stock', label: 'Stock Overview', icon: Package },
     { href: '/dashboard/production/batches', label: 'Production', icon: Flame },
     { href: '/dashboard/purchasing/suppliers', label: 'Purchasing', icon: ShoppingCart },
     { href: '/dashboard/sales/clients', label: 'Sales', icon: TrendingUp },

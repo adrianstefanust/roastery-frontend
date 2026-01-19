@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, Package, Flame, Plus, FileText, BarChart, AlertTriangle, TrendingUp, Coffee } from 'lucide-react'
+import { Users, Package, Flame, Plus, FileText, BarChart, AlertTriangle, TrendingUp, Coffee, ShoppingCart, ShoppingBag, Clock, CheckCircle2, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/hooks/use-auth'
 import { useCurrency } from '@/lib/hooks/use-currency'
 import { env } from '@/lib/config/env'
 import { getCurrencyIcon } from '@/lib/utils/currency'
+import { formatNumber } from '@/lib/utils'
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts'
 import { format, subMonths } from 'date-fns'
 
@@ -25,6 +26,8 @@ interface DashboardStats {
   pendingBatches: number
   avgShrinkage: number
   lowStockLots: number
+  pendingPOs: number
+  pendingSOs: number
 }
 
 interface MonthlyProduction {
@@ -55,6 +58,24 @@ interface LowStockLot {
   current_weight: number
 }
 
+interface PendingPO {
+  id: string
+  po_number: string
+  supplier: { name: string }
+  status: string
+  total_amount: number
+  expected_delivery_date: string
+}
+
+interface PendingSO {
+  id: string
+  so_number: string
+  client: { name: string }
+  status: string
+  total_amount: number
+  requested_delivery_date: string
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const token = useAuthStore((state) => state.token)
@@ -70,16 +91,19 @@ export default function DashboardPage() {
     roastedStock: 0,
     pendingBatches: 0,
     avgShrinkage: 0,
-    lowStockLots: 0
+    lowStockLots: 0,
+    pendingPOs: 0,
+    pendingSOs: 0
   })
   const [monthlyProduction, setMonthlyProduction] = useState<MonthlyProduction[]>([])
   const [hppVariance, setHPPVariance] = useState<HPPVariance[]>([])
   const [recentBatches, setRecentBatches] = useState<RecentBatch[]>([])
   const [lowStockLots, setLowStockLots] = useState<LowStockLot[]>([])
+  const [pendingPOs, setPendingPOs] = useState<PendingPO[]>([])
+  const [pendingSOs, setPendingSOs] = useState<PendingSO[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Don't fetch data for SUPERADMIN users
     if (user?.role === 'SUPERADMIN') {
       setLoading(false)
       return
@@ -92,102 +116,101 @@ export default function DashboardPage() {
       setLoading(true)
 
       // Fetch all data in parallel
-      const [usersRes, lotsRes, batchesRes, costsRes] = await Promise.all([
+      const [usersRes, lotsRes, batchesRes, costsRes, posRes, sosRes] = await Promise.all([
         fetch(`${env.apiBase}/api/v1/users`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }).catch(() => ({ ok: false })),
         fetch(`${env.apiBase}/api/v1/inventory/lots`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }).catch(() => ({ ok: false })),
-        fetch(`${env.apiBase}/api/v1/roast-batches`, {
+        fetch(`${env.apiBase}/api/v1/production/batches`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }).catch(() => ({ ok: false })),
-        fetch(`${env.apiBase}/api/v1/finance/costs`, {
+        fetch(`${env.apiBase}/api/v1/finance/indirect-costs`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => ({ ok: false })),
+        fetch(`${env.apiBase}/api/v1/purchasing/orders`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => ({ ok: false })),
+        fetch(`${env.apiBase}/api/v1/sales/orders`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }).catch(() => ({ ok: false }))
       ])
 
-      const newStats = { ...stats }
-      let allBatches: any[] = []
-      let allLots: any[] = []
+      let newStats = { ...stats }
 
-      // Parse users
       if (usersRes.ok && 'json' in usersRes) {
         const usersData = await usersRes.json()
         newStats.totalUsers = usersData.data?.length || 0
       }
 
-      // Parse lots
       if (lotsRes.ok && 'json' in lotsRes) {
         const lotsData = await lotsRes.json()
-        allLots = lotsData?.data || []
-        newStats.coffeeLots = allLots.length
+        const lots = lotsData.data || []
+        newStats.coffeeLots = lots.length
+        newStats.greenBeanStock = lots.reduce((sum: number, lot: any) => sum + (lot.current_weight || 0), 0)
 
-        // Calculate green bean stock
-        newStats.greenBeanStock = allLots.reduce((sum: number, lot: any) =>
-          sum + (lot.current_weight || 0), 0
-        )
-
-        // Find low stock lots (< 50kg)
-        const lowStock = allLots.filter((lot: any) =>
-          lot.current_weight > 0 && lot.current_weight < 50
-        )
+        const lowStock = lots.filter((lot: any) => lot.current_weight < 50 && lot.current_weight > 0)
         newStats.lowStockLots = lowStock.length
-        setLowStockLots(lowStock.slice(0, 5))
+        setLowStockLots(lowStock.slice(0, 3))
       }
 
-      // Parse batches
       if (batchesRes.ok && 'json' in batchesRes) {
         const batchesData = await batchesRes.json()
-        allBatches = batchesData?.data || []
-        newStats.roastBatches = allBatches.length
+        const batches = batchesData.data || []
+        newStats.roastBatches = batches.length
+        newStats.roastedStock = batches
+          .filter((b: any) => b.status === 'QC_PASSED')
+          .reduce((sum: number, batch: any) => sum + (batch.weight_out || 0), 0)
 
-        // Calculate roasted stock (completed batches)
-        const completedBatches = allBatches.filter((b: any) =>
-          b.status === 'QC_PASSED' || b.status === 'QC_FAILED' || b.status === 'ROASTED'
-        )
-        newStats.roastedStock = completedBatches.reduce((sum: number, batch: any) =>
-          sum + (batch.weight_out || 0), 0
-        )
-
-        // Count pending batches
-        newStats.pendingBatches = allBatches.filter((b: any) =>
-          b.status === 'PENDING_ROAST'
+        newStats.pendingBatches = batches.filter((b: any) =>
+          b.status === 'PENDING_ROAST' || b.status === 'IN_PROGRESS'
         ).length
 
         // Calculate average shrinkage
-        const batchesWithShrinkage = allBatches.filter((b: any) =>
-          b.shrinkage_pct && b.shrinkage_pct > 0
-        )
-        if (batchesWithShrinkage.length > 0) {
-          newStats.avgShrinkage = batchesWithShrinkage.reduce((sum: number, b: any) =>
-            sum + b.shrinkage_pct, 0
-          ) / batchesWithShrinkage.length
+        const completedBatches = batches.filter((b: any) => b.weight_out > 0)
+        if (completedBatches.length > 0) {
+          const totalShrinkage = completedBatches.reduce((sum: number, batch: any) => {
+            const shrinkage = ((batch.weight_in - batch.weight_out) / batch.weight_in) * 100
+            return sum + shrinkage
+          }, 0)
+          newStats.avgShrinkage = totalShrinkage / completedBatches.length
         }
 
-        // Get recent batches
-        setRecentBatches(allBatches.slice(0, 5))
-
-        // Calculate monthly production (last 6 months)
-        const monthlyData = calculateMonthlyProduction(allBatches)
-        setMonthlyProduction(monthlyData)
+        setMonthlyProduction(calculateMonthlyProduction(batches))
+        setRecentBatches(batches.slice(0, 5))
       }
 
-      // Parse costs
       if (costsRes.ok && 'json' in costsRes) {
         const costsData = await costsRes.json()
+        const costs = costsData.data || []
+
         const currentMonth = new Date().getMonth() + 1
         const currentYear = new Date().getFullYear()
-        const currentCosts = costsData.data?.find(
-          (cost: any) => cost.month === currentMonth && cost.year === currentYear
-        )
-        if (currentCosts?.total_pool) {
-          newStats.monthlyCosts = parseFloat(currentCosts.total_pool).toLocaleString()
-        }
+        const currentMonthCost = costs.find((c: any) => c.month === currentMonth && c.year === currentYear)
+        newStats.monthlyCosts = currentMonthCost?.total_actual?.toLocaleString() || '0'
 
-        // Calculate HPP variance (last 6 months)
-        const varianceData = calculateHPPVariance(costsData?.data || [])
-        setHPPVariance(varianceData)
+        setHPPVariance(calculateHPPVariance(costs))
+      }
+
+      if (posRes.ok && 'json' in posRes) {
+        const posData = await posRes.json()
+        const allPOs = posData.purchase_orders || []
+        const pending = allPOs.filter((po: any) =>
+          po.status === 'SENT' || po.status === 'CONFIRMED' || po.status === 'IN_TRANSIT'
+        )
+        newStats.pendingPOs = pending.length
+        setPendingPOs(pending.slice(0, 5))
+      }
+
+      if (sosRes.ok && 'json' in sosRes) {
+        const sosData = await sosRes.json()
+        const allSOs = sosData.sales_orders || []
+        const pending = allSOs.filter((so: any) =>
+          so.status === 'PENDING' || so.status === 'CONFIRMED' || so.status === 'PREPARING'
+        )
+        newStats.pendingSOs = pending.length
+        setPendingSOs(pending.slice(0, 5))
       }
 
       setStats(newStats)
@@ -201,14 +224,12 @@ export default function DashboardPage() {
   const calculateMonthlyProduction = (batches: any[]) => {
     const monthlyMap = new Map<string, { batches: number; weightIn: number; weightOut: number }>()
 
-    // Get last 6 months
     for (let i = 5; i >= 0; i--) {
       const date = subMonths(new Date(), i)
       const key = format(date, 'yyyy-MM')
       monthlyMap.set(key, { batches: 0, weightIn: 0, weightOut: 0 })
     }
 
-    // Aggregate batch data
     batches.forEach((batch: any) => {
       const batchDate = new Date(batch.created_at)
       const key = format(batchDate, 'yyyy-MM')
@@ -242,7 +263,7 @@ export default function DashboardPage() {
 
       if (cost) {
         const estimated = cost.estimated_total || 0
-        const actual = cost.total_pool || 0
+        const actual = cost.total_actual || 0
         last6Months.push({
           month: format(date, 'MMM yyyy'),
           estimated: Math.round(estimated),
@@ -265,12 +286,20 @@ export default function DashboardPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING_ROAST':
+      case 'PENDING':
+      case 'SENT':
         return 'bg-yellow-100 text-yellow-800'
       case 'ROASTED':
+      case 'IN_PROGRESS':
+      case 'CONFIRMED':
+      case 'PREPARING':
         return 'bg-blue-100 text-blue-800'
       case 'QC_PASSED':
+      case 'COMPLETED':
+      case 'DELIVERED':
         return 'bg-green-100 text-green-800'
       case 'QC_FAILED':
+      case 'CANCELLED':
         return 'bg-red-100 text-red-800'
       default:
         return 'bg-gray-100 text-gray-800'
@@ -279,92 +308,61 @@ export default function DashboardPage() {
 
   const CurrencyIcon = getCurrencyIcon(user?.currency || 'USD')
 
-  const statsArray = [
+  const quickActions = [
     {
-      title: 'Green Bean Stock',
-      value: `${stats.greenBeanStock.toFixed(1)} kg`,
-      icon: Coffee,
-      iconColor: 'text-amber-700',
-      bgColor: 'bg-amber-100',
+      label: 'Stock Overview',
+      href: '/dashboard/inventory/stock',
+      icon: BarChart,
+      description: 'View all stock levels',
       show: true
     },
     {
-      title: 'Roasted Stock',
-      value: `${stats.roastedStock.toFixed(1)} kg`,
-      icon: Flame,
-      iconColor: 'text-orange-600',
-      bgColor: 'bg-orange-100',
-      show: isRoaster || isAdmin
-    },
-    {
-      title: 'Pending Batches',
-      value: stats.pendingBatches.toString(),
-      icon: Package,
-      iconColor: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-      show: isRoaster || isAdmin
-    },
-    {
-      title: 'Avg Shrinkage',
-      value: `${stats.avgShrinkage.toFixed(1)}%`,
-      icon: TrendingUp,
-      iconColor: 'text-purple-600',
-      bgColor: 'bg-purple-100',
-      show: isRoaster || isAdmin
-    },
-    {
-      title: 'Total Users',
-      value: stats.totalUsers.toString(),
-      icon: Users,
-      iconColor: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-      show: isAdmin
-    },
-    {
-      title: 'Monthly Costs',
-      value: `${symbol}${stats.monthlyCosts}`,
-      icon: CurrencyIcon,
-      iconColor: 'text-green-600',
-      bgColor: 'bg-green-100',
+      label: 'Create Purchase Order',
+      href: '/dashboard/purchasing/orders/new',
+      icon: ShoppingCart,
+      description: 'Order green coffee',
       show: isAccountant || isAdmin
-    }
-  ]
-
-  const quickActions = [
+    },
+    {
+      label: 'Create Sales Order',
+      href: '/dashboard/sales/orders/new',
+      icon: ShoppingBag,
+      description: 'Sell roasted coffee',
+      show: isAccountant || isAdmin
+    },
     {
       label: 'Create GRN',
       href: '/dashboard/inventory/grn',
       icon: FileText,
+      description: 'Receive green coffee',
       show: isAccountant || isAdmin
     },
     {
       label: 'New Roast Batch',
       href: '/dashboard/production/batches/new',
       icon: Flame,
+      description: 'Start roasting',
       show: isRoaster || isAdmin
     },
     {
       label: 'Record Costs',
       href: '/dashboard/finance/costs/new',
       icon: CurrencyIcon,
+      description: 'Track expenses',
       show: isAccountant || isAdmin
     },
     {
       label: 'Manage Users',
       href: '/dashboard/users',
       icon: Users,
+      description: 'Team management',
       show: isAdmin
-    },
-    {
-      label: 'View Inventory',
-      href: '/dashboard/inventory/lots',
-      icon: Package,
-      show: true
     },
     {
       label: 'View Reports',
       href: '/dashboard/finance/reports',
       icon: BarChart,
+      description: 'Financial reports',
       show: isAccountant || isAdmin
     }
   ]
@@ -394,31 +392,229 @@ export default function DashboardPage() {
         </Alert>
       )}
 
+      {/* Quick Actions - TOP SECTION */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            Quick Actions
+          </CardTitle>
+          <CardDescription>Common tasks and shortcuts</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {quickActions.filter(action => action.show).map((action) => (
+              <Button
+                key={action.label}
+                variant="outline"
+                className="h-auto py-4 px-4 justify-start flex-col items-start"
+                asChild
+              >
+                <Link href={action.href}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <action.icon className="h-4 w-4" />
+                    <span className="font-medium">{action.label}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{action.description}</span>
+                </Link>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pending Orders Row */}
+      {(isAccountant || isAdmin) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Pending Purchase Orders */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <ShoppingCart className="h-5 w-5 text-orange-600" />
+                    Pending Purchase Orders
+                  </CardTitle>
+                  <CardDescription>Orders awaiting delivery</CardDescription>
+                </div>
+                <Badge variant="secondary" className="text-lg">
+                  {stats.pendingPOs}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {pendingPOs.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  <CheckCircle2 className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p className="text-sm">No pending purchase orders</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pendingPOs.map((po) => (
+                    <Link
+                      key={po.id}
+                      href={`/dashboard/purchasing/orders/${po.id}`}
+                      className="block p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm">{po.po_number}</span>
+                        <Badge className={getStatusColor(po.status)} variant="secondary">
+                          {po.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-600">{po.supplier?.name || 'Unknown Supplier'}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs text-gray-500">
+                          {po.expected_delivery_date && `Due: ${format(new Date(po.expected_delivery_date), 'MMM d')}`}
+                        </span>
+                        <span className="text-sm font-medium">{symbol}{formatNumber(po.total_amount)}</span>
+                      </div>
+                    </Link>
+                  ))}
+                  {stats.pendingPOs > 5 && (
+                    <Button variant="ghost" size="sm" className="w-full" asChild>
+                      <Link href="/dashboard/purchasing/orders">
+                        View All {stats.pendingPOs} Orders
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending Sales Orders */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <ShoppingBag className="h-5 w-5 text-blue-600" />
+                    Pending Sales Orders
+                  </CardTitle>
+                  <CardDescription>Orders to fulfill</CardDescription>
+                </div>
+                <Badge variant="secondary" className="text-lg">
+                  {stats.pendingSOs}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {pendingSOs.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  <CheckCircle2 className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p className="text-sm">No pending sales orders</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pendingSOs.map((so) => (
+                    <Link
+                      key={so.id}
+                      href={`/dashboard/sales/orders/${so.id}`}
+                      className="block p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm">{so.so_number}</span>
+                        <Badge className={getStatusColor(so.status)} variant="secondary">
+                          {so.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-600">{so.client?.name || 'Unknown Client'}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs text-gray-500">
+                          {so.requested_delivery_date && `Due: ${format(new Date(so.requested_delivery_date), 'MMM d')}`}
+                        </span>
+                        <span className="text-sm font-medium">{symbol}{formatNumber(so.total_amount)}</span>
+                      </div>
+                    </Link>
+                  ))}
+                  {stats.pendingSOs > 5 && (
+                    <Button variant="ghost" size="sm" className="w-full" asChild>
+                      <Link href="/dashboard/sales/orders">
+                        View All {stats.pendingSOs} Orders
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {statsArray.filter(stat => stat.show).map((stat) => (
-          <Card key={stat.title}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Green Stock</p>
+                <p className="mt-2 text-2xl font-semibold text-gray-900">
+                  {loading ? '...' : `${formatNumber(stats.greenBeanStock)} kg`}
+                </p>
+              </div>
+              <div className="p-3 bg-amber-100 rounded-lg">
+                <Coffee className="w-6 h-6 text-amber-700" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {(isRoaster || isAdmin) && (
+          <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">
-                    {stat.title}
-                  </p>
-                  <p className="mt-2 text-3xl font-semibold text-gray-900">
-                    {loading ? (
-                      <span className="animate-pulse text-gray-400">...</span>
-                    ) : (
-                      stat.value
-                    )}
+                  <p className="text-sm font-medium text-gray-600">Roasted Stock</p>
+                  <p className="mt-2 text-2xl font-semibold text-gray-900">
+                    {loading ? '...' : `${formatNumber(stats.roastedStock)} kg`}
                   </p>
                 </div>
-                <div className={`p-3 ${stat.bgColor} rounded-lg flex items-center justify-center`}>
-                  <stat.icon className={`w-6 h-6 ${stat.iconColor}`} />
+                <div className="p-3 bg-orange-100 rounded-lg">
+                  <Flame className="w-6 h-6 text-orange-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
-        ))}
+        )}
+
+        {(isRoaster || isAdmin) && (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Pending Batches</p>
+                  <p className="mt-2 text-2xl font-semibold text-gray-900">
+                    {loading ? '...' : stats.pendingBatches}
+                  </p>
+                </div>
+                <div className="p-3 bg-blue-100 rounded-lg">
+                  <Package className="w-6 h-6 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {(isAccountant || isAdmin) && (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Monthly Costs</p>
+                  <p className="mt-2 text-2xl font-semibold text-gray-900">
+                    {loading ? '...' : `${symbol}${stats.monthlyCosts}`}
+                  </p>
+                </div>
+                <div className="p-3 bg-green-100 rounded-lg">
+                  <CurrencyIcon className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Charts Row */}
@@ -428,13 +624,13 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart className="h-5 w-5" />
-              Monthly Production (Last 6 Months)
+              Monthly Production
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="h-64 flex items-center justify-center">
-                <p className="text-gray-500">Loading chart...</p>
+                <p className="text-gray-500">Loading...</p>
               </div>
             ) : monthlyProduction.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
@@ -450,7 +646,7 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             ) : (
               <div className="h-64 flex items-center justify-center">
-                <p className="text-gray-500">No production data available</p>
+                <p className="text-gray-500">No data</p>
               </div>
             )}
           </CardContent>
@@ -462,13 +658,13 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CurrencyIcon className="h-5 w-5" />
-                Cost Variance (Estimated vs Actual)
+                Cost Variance
               </CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="h-64 flex items-center justify-center">
-                  <p className="text-gray-500">Loading chart...</p>
+                  <p className="text-gray-500">Loading...</p>
                 </div>
               ) : hppVariance.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
@@ -478,13 +674,13 @@ export default function DashboardPage() {
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="estimated" stroke="#3b82f6" name="Estimated ($)" strokeWidth={2} />
-                    <Line type="monotone" dataKey="actual" stroke="#10b981" name="Actual ($)" strokeWidth={2} />
+                    <Line type="monotone" dataKey="estimated" stroke="#3b82f6" name="Estimated" strokeWidth={2} />
+                    <Line type="monotone" dataKey="actual" stroke="#10b981" name="Actual" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-64 flex items-center justify-center">
-                  <p className="text-gray-500">No cost data available</p>
+                  <p className="text-gray-500">No data</p>
                 </div>
               )}
             </CardContent>
@@ -492,105 +688,30 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Recent Activity Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Batches */}
-        <Card>
+      {/* Low Stock Alerts */}
+      {lowStockLots.length > 0 && (
+        <Card className="border-yellow-200 bg-yellow-50">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Flame className="h-5 w-5" />
-                Recent Roast Batches
-              </span>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/dashboard/production/batches">View All</Link>
-              </Button>
+            <CardTitle className="flex items-center gap-2 text-yellow-900">
+              <AlertTriangle className="h-5 w-5" />
+              Low Stock Alerts
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <p className="text-gray-500">Loading...</p>
-            ) : recentBatches.length > 0 ? (
-              <div className="space-y-3">
-                {recentBatches.map((batch) => (
-                  <div key={batch.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {batch.weight_in.toFixed(1)} kg → {batch.weight_out ? `${batch.weight_out.toFixed(1)} kg` : 'Pending'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {format(new Date(batch.created_at), 'MMM dd, yyyy')}
-                      </p>
-                    </div>
-                    <Badge className={getStatusColor(batch.status)}>
-                      {batch.status.replace(/_/g, ' ')}
-                    </Badge>
+            <div className="space-y-3">
+              {lowStockLots.map((lot) => (
+                <div key={lot.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-yellow-200">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{lot.sku}</p>
+                    <p className="text-xs text-gray-500">Only {formatNumber(lot.current_weight)} kg remaining</p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">No batches yet</p>
-            )}
+                  <Badge className="bg-yellow-100 text-yellow-800">Low Stock</Badge>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
-
-        {/* Low Stock Lots */}
-        {lowStockLots.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                  Low Stock Alerts
-                </span>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/dashboard/inventory/lots">View All</Link>
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {lowStockLots.map((lot) => (
-                  <div key={lot.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{lot.sku}</p>
-                      <p className="text-xs text-gray-500">Only {lot.current_weight.toFixed(1)} kg remaining</p>
-                    </div>
-                    <Badge className="bg-yellow-100 text-yellow-800">Low Stock</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Quick Actions (if no low stock alerts) */}
-        {lowStockLots.length === 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg sm:text-xl">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-3">
-                {quickActions.filter(action => action.show).slice(0, 6).map((action) => (
-                  <Button
-                    key={action.label}
-                    variant="outline"
-                    size="lg"
-                    className="w-full justify-start"
-                    asChild
-                  >
-                    <Link href={action.href}>
-                      <action.icon className="mr-2 h-4 w-4" />
-                      {action.label}
-                    </Link>
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      )}
     </div>
   )
 }
