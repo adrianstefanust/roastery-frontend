@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { FormattedNumberInput } from '@/components/ui/formatted-number-input'
 import {
   Select,
   SelectContent,
@@ -29,6 +30,7 @@ import { env } from '@/lib/config/env'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { toast } from 'sonner'
 import type { Supplier } from '@/types'
+import { formatNumber } from '@/lib/utils'
 
 interface OrderItem {
   sku: string
@@ -360,32 +362,30 @@ export default function NewPurchaseOrderPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={item.quantity_kg || ''}
-                        onChange={(e) => {
-                          const newItem = { ...item, quantity_kg: parseFloat(e.target.value) || 0 }
+                      <FormattedNumberInput
+                        value={item.quantity_kg || 0}
+                        onChange={(value) => {
+                          const newItem = { ...item, quantity_kg: value }
                           updateItemTotal(index, newItem)
                         }}
-                        placeholder="0.00"
+                        decimals={2}
+                        placeholder="0,00"
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={item.unit_price || ''}
-                        onChange={(e) => {
-                          const newItem = { ...item, unit_price: parseFloat(e.target.value) || 0 }
+                      <FormattedNumberInput
+                        value={item.unit_price || 0}
+                        onChange={(value) => {
+                          const newItem = { ...item, unit_price: value }
                           updateItemTotal(index, newItem)
                         }}
-                        placeholder="0.00"
+                        decimals={2}
+                        placeholder="0,00"
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm font-medium">
-                        ${item.total_price.toFixed(2)}
+                      <div className="text-sm font-medium text-right">
+                        {formatNumber(item.total_price)}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -407,8 +407,8 @@ export default function NewPurchaseOrderPage() {
                   <TableCell colSpan={4} className="text-right font-medium">
                     Grand Total:
                   </TableCell>
-                  <TableCell colSpan={2} className="font-bold text-lg">
-                    ${calculateGrandTotal().toFixed(2)} {form.currency}
+                  <TableCell colSpan={2} className="font-bold text-lg text-right">
+                    {formatNumber(calculateGrandTotal())} {form.currency}
                   </TableCell>
                 </TableRow>
               </TableFooter>

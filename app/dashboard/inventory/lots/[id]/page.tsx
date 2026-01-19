@@ -20,6 +20,7 @@ import { useCurrency } from '@/lib/hooks/use-currency'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import type { GreenCoffeeLot } from '@/types'
+import { formatNumber } from '@/lib/utils'
 
 const editLotSchema = z.object({
   moisture_content: z.string().refine(
@@ -240,7 +241,7 @@ export default function LotDetailPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Current Weight</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {lot.current_weight.toFixed(2)} kg
+                  {formatNumber(lot.current_weight)} kg
                 </p>
               </div>
             </div>
@@ -316,35 +317,35 @@ export default function LotDetailPage() {
             <div>
               <h3 className="text-sm font-medium text-gray-500">Initial Weight</h3>
               <p className="mt-1 text-base font-semibold text-gray-900">
-                {lot.initial_weight.toFixed(2)} kg
+                {formatNumber(lot.initial_weight)} kg
               </p>
             </div>
 
             <div>
               <h3 className="text-sm font-medium text-gray-500">Current Weight</h3>
               <p className="mt-1 text-base font-semibold text-gray-900">
-                {lot.current_weight.toFixed(2)} kg
+                {formatNumber(lot.current_weight)} kg
               </p>
             </div>
 
             <div>
               <h3 className="text-sm font-medium text-gray-500">Purchase Cost per KG</h3>
               <p className="mt-1 text-base font-semibold text-gray-900">
-                {symbol}{lot.purchase_cost_per_kg?.toFixed(2) || '0.00'}
+                {symbol}{formatNumber(lot.purchase_cost_per_kg || 0)}
               </p>
             </div>
 
             <div>
               <h3 className="text-sm font-medium text-gray-500">Weighted Avg Cost</h3>
               <p className="mt-1 text-base font-semibold text-gray-900">
-                {symbol}{lot.weighted_avg_cost.toFixed(2)}
+                {symbol}{formatNumber(lot.weighted_avg_cost)}
               </p>
             </div>
 
             <div>
               <h3 className="text-sm font-medium text-gray-500">Moisture Content</h3>
               <p className="mt-1 text-base font-semibold text-gray-900">
-                {lot.moisture_content.toFixed(1)}%
+                {formatNumber(lot.moisture_content, 1)}%
               </p>
             </div>
 
@@ -379,21 +380,21 @@ export default function LotDetailPage() {
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm font-medium text-gray-500">Weight Used</p>
                 <p className="mt-1 text-xl font-bold text-gray-900">
-                  {(lot.initial_weight - lot.current_weight).toFixed(2)} kg
+                  {formatNumber(lot.initial_weight - lot.current_weight)} kg
                 </p>
               </div>
 
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm font-medium text-gray-500">Usage %</p>
                 <p className="mt-1 text-xl font-bold text-gray-900">
-                  {((1 - lot.current_weight / lot.initial_weight) * 100).toFixed(1)}%
+                  {formatNumber((1 - lot.current_weight / lot.initial_weight) * 100, 1)}%
                 </p>
               </div>
 
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm font-medium text-gray-500">Total Value</p>
                 <p className="mt-1 text-xl font-bold text-gray-900">
-                  {symbol}{(lot.current_weight * lot.weighted_avg_cost).toFixed(2)}
+                  {symbol}{formatNumber(lot.current_weight * lot.weighted_avg_cost)}
                 </p>
               </div>
             </div>
