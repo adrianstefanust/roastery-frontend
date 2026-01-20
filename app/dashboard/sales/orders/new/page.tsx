@@ -98,61 +98,43 @@ export default function NewSalesOrderPage() {
     try {
       setLoadingProducts(true)
 
-      // Try fetching from roasted stock endpoint first
-      let response = await fetch(`${env.apiBase}/api/v1/inventory/stock/roasted?page=1&limit=1000`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const stockItems = data.data || data.stock || []
-
-        // Use roasted stock data
-        const products = stockItems
-          .filter((item: any) => item.total_weight > 0)
-          .map((item: any) => ({
-            sku: item.sku || item.product_sku,
-            available_qty: item.total_weight || 0
-          }))
-
-        setAvailableProducts(products)
-        return
-      }
-
-      // Fallback: Try production batches endpoint
-      response = await fetch(`${env.apiBase}/api/v1/production/batches?page=1&limit=1000`, {
+      // Fetch production batches (same endpoint as stock overview page)
+      const response = await fetch(`${env.apiBase}/api/v1/production/batches`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
 
       if (!response.ok) {
-        console.warn('Production batches endpoint not available, using empty product list')
+        console.warn('Failed to fetch production batches')
         setAvailableProducts([])
         return
       }
 
       const data = await response.json()
-      const batches = data.batches || data.data || []
+      const batches = data.data || data.batches || []
 
-      // Group by product_sku and sum available quantities (only QC_PASSED)
+      // Group by product_sku and sum available quantities (only QC_PASSED batches)
       const productMap = new Map<string, number>()
       batches.forEach((batch: any) => {
         // Only include QC_PASSED batches with available inventory
         if (batch.status === 'QC_PASSED' && batch.product_sku && batch.weight_out > 0) {
           const currentQty = productMap.get(batch.product_sku) || 0
-          const availableQty = batch.available_quantity_kg || batch.weight_out
+          // Use available_quantity_kg if it exists, otherwise use weight_out
+          const availableQty = batch.available_quantity_kg !== undefined
+            ? batch.available_quantity_kg
+            : batch.weight_out
           productMap.set(batch.product_sku, currentQty + availableQty)
         }
       })
 
       // Convert to array
-      const products = Array.from(productMap.entries()).map(([sku, available_qty]) => ({
-        sku,
-        available_qty
-      }))
+      const products = Array.from(productMap.entries())
+        .map(([sku, available_qty]) => ({
+          sku,
+          available_qty
+        }))
+        .filter(p => p.available_qty > 0) // Only show products with available stock
 
       setAvailableProducts(products)
     } catch (error) {
