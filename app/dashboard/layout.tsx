@@ -107,7 +107,10 @@ export default function DashboardLayout({
                   <nav className="space-y-1">
                     {navItems.map((item) => {
                       const Icon = item.icon
-                      const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                      // For Dashboard, only exact match. For others, match sub-routes too
+                      const isActive = item.href === '/dashboard'
+                        ? pathname === '/dashboard'
+                        : pathname === item.href || pathname.startsWith(item.href + '/')
 
                       return (
                         <Link
@@ -164,7 +167,10 @@ export default function DashboardLayout({
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                // For Dashboard, only exact match. For others, match sub-routes too
+                const isActive = item.href === '/dashboard'
+                  ? pathname === '/dashboard'
+                  : pathname === item.href || pathname.startsWith(item.href + '/')
 
                 return (
                   <Link
