@@ -96,14 +96,14 @@ export default function StockOverviewPage() {
     const summary = new Map<string, StockSummaryBySKU>()
 
     greenLots
-      .filter(lot => lot.status === 'AVAILABLE' && lot.current_weight > 0)
+      .filter(lot => lot.current_weight > 0) // Only filter by weight, no status field in DB
       .forEach(lot => {
         const existing = summary.get(lot.sku)
         if (existing) {
           existing.total_weight += lot.current_weight
           existing.lot_count += 1
-          existing.total_value += lot.current_weight * lot.weighted_avg_cost
-          if (new Date(lot.received_at) < new Date(existing.oldest_date)) {
+          existing.total_value += lot.current_weight * (lot.weighted_avg_cost || lot.unit_cost_wac)
+          if (lot.received_at && new Date(lot.received_at) < new Date(existing.oldest_date)) {
             existing.oldest_date = lot.received_at
           }
         } else {
@@ -111,8 +111,8 @@ export default function StockOverviewPage() {
             sku: lot.sku,
             total_weight: lot.current_weight,
             lot_count: 1,
-            total_value: lot.current_weight * lot.weighted_avg_cost,
-            oldest_date: lot.received_at
+            total_value: lot.current_weight * (lot.weighted_avg_cost || lot.unit_cost_wac),
+            oldest_date: lot.received_at || lot.created_at
           })
         }
       })
