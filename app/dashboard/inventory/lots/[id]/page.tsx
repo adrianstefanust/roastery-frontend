@@ -72,7 +72,7 @@ export default function LotDetailPage() {
       }
 
       const data = await response.json()
-      setLot(data.data)
+      setLot(data) // API returns lot directly, not wrapped in {data: ...}
     } catch (error) {
       console.error('Error fetching lot:', error)
       toast.error('Failed to load lot details')
