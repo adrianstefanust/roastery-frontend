@@ -315,7 +315,9 @@ export default function StockOverviewPage() {
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href="/dashboard/inventory/lots">View</Link>
+                          <Link href={`/dashboard/inventory/lots?sku=${encodeURIComponent(stock.sku)}`}>
+                            View Lots
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>

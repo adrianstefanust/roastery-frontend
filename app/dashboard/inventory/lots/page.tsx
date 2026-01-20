@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, Package, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,15 +15,23 @@ import { toast } from 'sonner'
 import type { GreenCoffeeLot } from '@/types'
 
 export default function InventoryLotsPage() {
+  const searchParams = useSearchParams()
+  const skuParam = searchParams.get('sku')
   const [lots, setLots] = useState<GreenCoffeeLot[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(skuParam || '')
   const token = useAuthStore((state) => state.token)
   const { symbol } = useCurrency()
 
   useEffect(() => {
     fetchLots()
   }, [])
+
+  useEffect(() => {
+    if (skuParam) {
+      setSearchQuery(skuParam)
+    }
+  }, [skuParam])
 
   const fetchLots = async () => {
     try {
