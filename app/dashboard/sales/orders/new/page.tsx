@@ -48,6 +48,8 @@ export default function NewSalesOrderPage() {
 
   const [clients, setClients] = useState<Client[]>([])
   const [loadingClients, setLoadingClients] = useState(true)
+  const [availableProducts, setAvailableProducts] = useState<Array<{ sku: string; available_qty: number }>>([])
+  const [loadingProducts, setLoadingProducts] = useState(true)
 
   const [form, setForm] = useState({
     client_id: searchParams.get('client_id') || '',
@@ -66,6 +68,7 @@ export default function NewSalesOrderPage() {
 
   useEffect(() => {
     fetchClients()
+    fetchAvailableProducts()
   }, [])
 
   const fetchClients = async () => {
@@ -88,6 +91,47 @@ export default function NewSalesOrderPage() {
       toast.error('Failed to load clients')
     } finally {
       setLoadingClients(false)
+    }
+  }
+
+  const fetchAvailableProducts = async () => {
+    try {
+      setLoadingProducts(true)
+      const response = await fetch(`${env.apiBase}/api/v1/production/batches?status=QC_PASSED&page=1&limit=1000`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch products')
+      }
+
+      const data = await response.json()
+      const batches = data.batches || []
+
+      // Group by product_sku and sum available quantities
+      const productMap = new Map<string, number>()
+      batches.forEach((batch: any) => {
+        if (batch.product_sku && batch.weight_out > 0) {
+          const currentQty = productMap.get(batch.product_sku) || 0
+          const availableQty = batch.available_quantity_kg || batch.weight_out
+          productMap.set(batch.product_sku, currentQty + availableQty)
+        }
+      })
+
+      // Convert to array
+      const products = Array.from(productMap.entries()).map(([sku, available_qty]) => ({
+        sku,
+        available_qty
+      }))
+
+      setAvailableProducts(products)
+    } catch (error) {
+      console.error('Error fetching products:', error)
+      // Don't show error toast, just log it
+    } finally {
+      setLoadingProducts(false)
     }
   }
 
@@ -360,19 +404,48 @@ export default function NewSalesOrderPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item, index) => (
-                  <TableRow key={index}>
-                    <TableCell>
-                      <Input
-                        value={item.product_sku}
-                        onChange={(e) => {
-                          const newItems = [...items]
-                          newItems[index].product_sku = e.target.value
-                          setItems(newItems)
-                        }}
-                        placeholder="e.g., MEDIUM-ROAST"
-                      />
-                    </TableCell>
+                {items.map((item, index) => {
+                  const product = availableProducts.find(p => p.sku === item.product_sku)
+                  const hasInsufficientStock = product && item.quantity_kg > product.available_qty
+
+                  return (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Select
+                            value={item.product_sku || '__empty__'}
+                            onValueChange={(value) => {
+                              const newItems = [...items]
+                              if (value !== '__empty__') {
+                                newItems[index].product_sku = value
+                              }
+                              setItems(newItems)
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select product" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableProducts.length === 0 ? (
+                                <SelectItem value="__empty__" disabled>
+                                  No products available
+                                </SelectItem>
+                              ) : (
+                                availableProducts.map((product) => (
+                                  <SelectItem key={product.sku} value={product.sku}>
+                                    {product.sku} ({formatNumber(product.available_qty)} kg available)
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {hasInsufficientStock && (
+                            <p className="text-xs text-red-600">
+                              Only {formatNumber(product.available_qty)} kg available
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
                     <TableCell>
                       <Input
                         value={item.description}
@@ -423,7 +496,8 @@ export default function NewSalesOrderPage() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
               <TableFooter>
                 <TableRow>

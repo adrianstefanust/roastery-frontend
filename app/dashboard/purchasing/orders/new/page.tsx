@@ -48,6 +48,8 @@ export default function NewPurchaseOrderPage() {
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loadingSuppliers, setLoadingSuppliers] = useState(true)
+  const [availableSKUs, setAvailableSKUs] = useState<string[]>([])
+  const [loadingSKUs, setLoadingSKUs] = useState(true)
 
   const [form, setForm] = useState({
     supplier_id: searchParams.get('supplier_id') || '',
@@ -66,6 +68,7 @@ export default function NewPurchaseOrderPage() {
 
   useEffect(() => {
     fetchSuppliers()
+    fetchAvailableSKUs()
   }, [])
 
   const fetchSuppliers = async () => {
@@ -88,6 +91,32 @@ export default function NewPurchaseOrderPage() {
       toast.error('Failed to load suppliers')
     } finally {
       setLoadingSuppliers(false)
+    }
+  }
+
+  const fetchAvailableSKUs = async () => {
+    try {
+      setLoadingSKUs(true)
+      const response = await fetch(`${env.apiBase}/api/v1/inventory/lots?page=1&limit=1000`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch SKUs')
+      }
+
+      const data = await response.json()
+      const lots = data.data || []
+      // Get unique SKUs from existing lots
+      const uniqueSKUs = Array.from(new Set(lots.map((lot: any) => lot.sku).filter((sku: string) => sku)))
+      setAvailableSKUs(uniqueSKUs as string[])
+    } catch (error) {
+      console.error('Error fetching SKUs:', error)
+      // Don't show error toast, just log it - user can still type custom SKU
+    } finally {
+      setLoadingSKUs(false)
     }
   }
 
@@ -340,15 +369,46 @@ export default function NewPurchaseOrderPage() {
                 {items.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>
-                      <Input
-                        value={item.sku}
-                        onChange={(e) => {
-                          const newItems = [...items]
-                          newItems[index].sku = e.target.value
-                          setItems(newItems)
-                        }}
-                        placeholder="e.g., COL-EXCELSO"
-                      />
+                      <div className="flex flex-col gap-1">
+                        <Select
+                          value={item.sku || '__custom__'}
+                          onValueChange={(value) => {
+                            const newItems = [...items]
+                            if (value === '__custom__') {
+                              newItems[index].sku = ''
+                            } else {
+                              newItems[index].sku = value
+                            }
+                            setItems(newItems)
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select or enter SKU" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__custom__">
+                              <span className="text-blue-600">+ Enter Custom SKU</span>
+                            </SelectItem>
+                            {availableSKUs.map((sku) => (
+                              <SelectItem key={sku} value={sku}>
+                                {sku}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {(item.sku === '' || !availableSKUs.includes(item.sku)) && (
+                          <Input
+                            value={item.sku}
+                            onChange={(e) => {
+                              const newItems = [...items]
+                              newItems[index].sku = e.target.value
+                              setItems(newItems)
+                            }}
+                            placeholder="Enter SKU (e.g., COL-EXCELSO)"
+                            className="text-sm"
+                          />
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Input
