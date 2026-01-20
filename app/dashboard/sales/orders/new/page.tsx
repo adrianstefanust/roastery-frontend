@@ -98,15 +98,15 @@ export default function NewSalesOrderPage() {
     try {
       setLoadingProducts(true)
 
-      // Fetch production batches (same endpoint as stock overview page)
-      const response = await fetch(`${env.apiBase}/api/v1/production/batches`, {
+      // Fetch roast batches (correct endpoint)
+      const response = await fetch(`${env.apiBase}/api/v1/roast-batches`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
 
       if (!response.ok) {
-        console.warn('Failed to fetch production batches')
+        console.warn('Failed to fetch roast batches')
         setAvailableProducts([])
         return
       }
