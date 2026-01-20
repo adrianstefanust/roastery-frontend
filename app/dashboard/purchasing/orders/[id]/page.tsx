@@ -154,8 +154,20 @@ export default function PurchaseOrderDetailPage() {
       )
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update status')
+        // Try to parse error message from response
+        let errorMessage = 'Failed to update status'
+        try {
+          const data = await response.json()
+          errorMessage = data.error || errorMessage
+        } catch {
+          // If response is not JSON, check status code
+          if (response.status === 404) {
+            errorMessage = 'Purchase order status endpoint not implemented yet. Please check with your system administrator.'
+          } else {
+            errorMessage = `Server error: ${response.status} ${response.statusText}`
+          }
+        }
+        throw new Error(errorMessage)
       }
 
       toast.success('Status updated successfully')
@@ -166,7 +178,12 @@ export default function PurchaseOrderDetailPage() {
       fetchStatusHistory()
     } catch (error: any) {
       console.error('Error updating status:', error)
-      toast.error(error.message || 'Failed to update status')
+      // Check if it's a network error
+      if (error.message === 'Failed to fetch') {
+        toast.error('Unable to connect to the server. The purchasing API may not be fully implemented yet.')
+      } else {
+        toast.error(error.message || 'Failed to update status')
+      }
     } finally {
       setProcessing(false)
     }
@@ -191,8 +208,18 @@ export default function PurchaseOrderDetailPage() {
       )
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to receive goods')
+        let errorMessage = 'Failed to receive goods'
+        try {
+          const data = await response.json()
+          errorMessage = data.error || errorMessage
+        } catch {
+          if (response.status === 404) {
+            errorMessage = 'Receive goods endpoint not implemented yet. Please check with your system administrator.'
+          } else {
+            errorMessage = `Server error: ${response.status} ${response.statusText}`
+          }
+        }
+        throw new Error(errorMessage)
       }
 
       toast.success('Goods received successfully. GRN created automatically.')
@@ -202,7 +229,11 @@ export default function PurchaseOrderDetailPage() {
       fetchStatusHistory()
     } catch (error: any) {
       console.error('Error receiving goods:', error)
-      toast.error(error.message || 'Failed to receive goods')
+      if (error.message === 'Failed to fetch') {
+        toast.error('Unable to connect to the server. The purchasing API may not be fully implemented yet.')
+      } else {
+        toast.error(error.message || 'Failed to receive goods')
+      }
     } finally {
       setProcessing(false)
     }
@@ -219,15 +250,29 @@ export default function PurchaseOrderDetailPage() {
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete purchase order')
+        let errorMessage = 'Failed to delete purchase order'
+        try {
+          const data = await response.json()
+          errorMessage = data.error || errorMessage
+        } catch {
+          if (response.status === 404) {
+            errorMessage = 'Delete purchase order endpoint not implemented yet. Please check with your system administrator.'
+          } else {
+            errorMessage = `Server error: ${response.status} ${response.statusText}`
+          }
+        }
+        throw new Error(errorMessage)
       }
 
       toast.success('Purchase order deleted successfully')
       router.push('/dashboard/purchasing/orders')
     } catch (error: any) {
       console.error('Error deleting purchase order:', error)
-      toast.error(error.message || 'Failed to delete purchase order')
+      if (error.message === 'Failed to fetch') {
+        toast.error('Unable to connect to the server. The purchasing API may not be fully implemented yet.')
+      } else {
+        toast.error(error.message || 'Failed to delete purchase order')
+      }
       setDeleteDialogOpen(false)
     } finally {
       setProcessing(false)
