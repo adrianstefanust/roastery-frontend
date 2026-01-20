@@ -3,13 +3,24 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, LogOut, Menu, X, Home, Package, Flame, Users, ShoppingCart, TrendingUp } from 'lucide-react'
+import {
+  Bell, LogOut, Menu, Home, Package, Flame, Users,
+  ShoppingCart, TrendingUp, PackageOpen, ClipboardList,
+  FileText, Truck, UserCircle, Receipt, DollarSign
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { getCurrencyIcon } from '@/lib/utils/currency'
+
+type NavItem = {
+  href: string
+  label: string
+  icon: any
+  children?: NavItem[]
+}
 
 export default function DashboardLayout({
   children,
@@ -46,18 +57,63 @@ export default function DashboardLayout({
 
   const CurrencyIcon = getCurrencyIcon(user?.currency || 'USD')
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/dashboard/inventory/stock', label: 'Stock Overview', icon: Package },
-    { href: '/dashboard/production/batches', label: 'Production', icon: Flame },
-    { href: '/dashboard/purchasing/suppliers', label: 'Purchasing', icon: ShoppingCart },
-    { href: '/dashboard/sales/clients', label: 'Sales', icon: TrendingUp },
-    { href: '/dashboard/finance/costs', label: 'Finance', icon: CurrencyIcon },
+    {
+      href: '/dashboard/inventory',
+      label: 'Inventory',
+      icon: Package,
+      children: [
+        { href: '/dashboard/inventory/stock', label: 'Stock Overview', icon: PackageOpen },
+        { href: '/dashboard/inventory/lots', label: 'Coffee Lots', icon: ClipboardList },
+        { href: '/dashboard/inventory/grn', label: 'Goods Receipt', icon: Receipt },
+      ]
+    },
+    {
+      href: '/dashboard/production',
+      label: 'Production',
+      icon: Flame,
+      children: [
+        { href: '/dashboard/production/batches', label: 'Roast Batches', icon: Flame },
+      ]
+    },
+    {
+      href: '/dashboard/purchasing',
+      label: 'Purchasing',
+      icon: ShoppingCart,
+      children: [
+        { href: '/dashboard/purchasing/suppliers', label: 'Suppliers', icon: Truck },
+        { href: '/dashboard/purchasing/orders', label: 'Purchase Orders', icon: FileText },
+      ]
+    },
+    {
+      href: '/dashboard/sales',
+      label: 'Sales',
+      icon: TrendingUp,
+      children: [
+        { href: '/dashboard/sales/clients', label: 'Clients', icon: UserCircle },
+        { href: '/dashboard/sales/orders', label: 'Sales Orders', icon: Receipt },
+      ]
+    },
+    {
+      href: '/dashboard/finance',
+      label: 'Finance',
+      icon: CurrencyIcon,
+      children: [
+        { href: '/dashboard/finance/costs', label: 'Cost Management', icon: DollarSign },
+      ]
+    },
   ]
 
   if (isAdmin) {
     navItems.push({ href: '/dashboard/users', label: 'Users', icon: Users })
   }
+
+  // Find active parent and children for sub-navigation
+  const activeParent = navItems.find(item =>
+    item.children && pathname.startsWith(item.href + '/')
+  )
+  const showSubNav = activeParent && activeParent.children && activeParent.children.length > 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -113,18 +169,42 @@ export default function DashboardLayout({
                         : pathname === item.href || pathname.startsWith(item.href + '/')
 
                       return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                            isActive
-                              ? 'bg-gray-100 text-gray-900'
-                              : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                          }`}
-                        >
-                          <Icon className="h-5 w-5" />
-                          {item.label}
-                        </Link>
+                        <div key={item.href}>
+                          <Link
+                            href={item.children ? item.children[0].href : item.href}
+                            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              isActive
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                            }`}
+                          >
+                            <Icon className="h-5 w-5" />
+                            {item.label}
+                          </Link>
+                          {/* Show children if parent is active */}
+                          {item.children && isActive && (
+                            <div className="ml-8 mt-1 space-y-1">
+                              {item.children.map((child) => {
+                                const ChildIcon = child.icon
+                                const isChildActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                                return (
+                                  <Link
+                                    key={child.href}
+                                    href={child.href}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                      isChildActive
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                    }`}
+                                  >
+                                    <ChildIcon className="h-4 w-4" />
+                                    {child.label}
+                                  </Link>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
                       )
                     })}
                   </nav>
@@ -175,7 +255,7 @@ export default function DashboardLayout({
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={item.children ? item.children[0].href : item.href}
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-gray-100 text-gray-900'
@@ -208,6 +288,35 @@ export default function DashboardLayout({
           </div>
         </div>
       </header>
+
+      {/* Sub Navigation - Shows when in a section with children */}
+      {showSubNav && activeParent && (
+        <div className="bg-white border-b border-gray-200">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <nav className="flex items-center gap-1 py-2 overflow-x-auto">
+              {activeParent.children!.map((child) => {
+                const ChildIcon = child.icon
+                const isChildActive = pathname === child.href || pathname.startsWith(child.href + '/')
+
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                      isChildActive
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    <ChildIcon className="h-4 w-4" />
+                    {child.label}
+                  </Link>
+                )
+              })}
+            </nav>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
