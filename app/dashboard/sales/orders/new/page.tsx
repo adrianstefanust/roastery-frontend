@@ -112,13 +112,13 @@ export default function NewSalesOrderPage() {
       }
 
       const data = await response.json()
-      const batches = data.data || data.batches || []
+      const batches = Array.isArray(data) ? data : (data.data || data.batches || [])
 
-      // Group by product_sku and sum available quantities (only QC_PASSED batches)
+      // Group by product_sku and sum available quantities (only QC_PASSED/QC_APPROVED batches)
       const productMap = new Map<string, number>()
       batches.forEach((batch: any) => {
-        // Only include QC_PASSED batches with available inventory
-        if (batch.status === 'QC_PASSED' && batch.product_sku && batch.weight_out > 0) {
+        // Only include QC_PASSED or QC_APPROVED batches with available inventory
+        if ((batch.status === 'QC_PASSED' || batch.status === 'QC_APPROVED') && batch.product_sku && batch.weight_out > 0) {
           const currentQty = productMap.get(batch.product_sku) || 0
           // Use available_quantity_kg if it exists, otherwise use weight_out
           const availableQty = batch.available_quantity_kg !== undefined

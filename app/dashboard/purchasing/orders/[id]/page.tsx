@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Package, Building2, Calendar, Truck, Check, X } from 'lucide-react'
+import { ArrowLeft, Package, Building2, Calendar, Truck, Check, X, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -368,6 +368,14 @@ export default function PurchaseOrderDetailPage() {
         </div>
         {isAccountantOrAdmin && (
           <div className="flex gap-2">
+            {(order.status === 'RECEIVED' || order.status === 'COMPLETED') && (
+              <Link href={`/dashboard/purchasing/invoices/new?po_id=${order.id}`}>
+                <Button variant="outline">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Generate Invoice
+                </Button>
+              </Link>
+            )}
             {canReceive && (
               <Button onClick={() => setReceiveDialogOpen(true)}>
                 <Check className="mr-2 h-4 w-4" />

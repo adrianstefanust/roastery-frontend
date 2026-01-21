@@ -25,7 +25,7 @@ import type { GreenCoffeeLot } from '@/types'
 interface RoastBatch {
   id: string
   batch_number: string
-  roast_profile: string
+  product_sku: string
   weight_out: number
   reserved_quantity_kg: number
   available_quantity_kg: number
@@ -42,7 +42,7 @@ interface StockSummaryBySKU {
 }
 
 interface RoastedStockBySKU {
-  roast_profile: string
+  product_sku: string
   total_available: number
   total_reserved: number
   total_weight: number
@@ -69,7 +69,7 @@ export default function StockOverviewPage() {
         fetch(`${env.apiBase}/api/v1/inventory/lots`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch(`${env.apiBase}/api/v1/production/batches`, {
+        fetch(`${env.apiBase}/api/v1/roast-batches`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ])
@@ -81,7 +81,7 @@ export default function StockOverviewPage() {
 
       if (batchesRes.ok && 'json' in batchesRes) {
         const batchesData = await batchesRes.json()
-        setRoastBatches(batchesData.data || [])
+        setRoastBatches(Array.isArray(batchesData) ? batchesData : [])
       }
     } catch (error) {
       console.error('Error fetching stock data:', error)
@@ -120,22 +120,23 @@ export default function StockOverviewPage() {
     return Array.from(summary.values()).sort((a, b) => b.total_weight - a.total_weight)
   }
 
-  // Calculate roasted coffee summary by roast profile
+  // Calculate roasted coffee summary by product SKU
   const roastedStockByProfile = (): RoastedStockBySKU[] => {
     const summary = new Map<string, RoastedStockBySKU>()
 
     roastBatches
-      .filter(batch => batch.status === 'QC_PASSED' && batch.weight_out > 0)
+      .filter(batch => (batch.status === 'QC_PASSED' || batch.status === 'QC_APPROVED') && batch.weight_out > 0)
       .forEach(batch => {
-        const existing = summary.get(batch.roast_profile)
+        const sku = batch.product_sku || 'UNKNOWN'
+        const existing = summary.get(sku)
         if (existing) {
           existing.total_available += batch.available_quantity_kg || 0
           existing.total_reserved += batch.reserved_quantity_kg || 0
           existing.total_weight += batch.weight_out
           existing.batch_count += 1
         } else {
-          summary.set(batch.roast_profile, {
-            roast_profile: batch.roast_profile,
+          summary.set(sku, {
+            product_sku: sku,
             total_available: batch.available_quantity_kg || 0,
             total_reserved: batch.reserved_quantity_kg || 0,
             total_weight: batch.weight_out,
@@ -174,6 +175,53 @@ export default function StockOverviewPage() {
           Comprehensive view of your green and roasted coffee inventory
         </p>
       </div>
+
+      {/* Low Stock Alerts */}
+      {(greenStock.filter(s => s.total_weight < 50).length > 0 ||
+        roastedStock.filter(s => s.total_available < 10).length > 0) && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-900">
+              <AlertTriangle className="h-5 w-5" />
+              Low Stock Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {greenStock
+                .filter(s => s.total_weight < 50)
+                .map(stock => (
+                  <div key={stock.sku} className="flex items-center justify-between p-3 bg-white rounded-md">
+                    <div>
+                      <p className="font-medium text-orange-900">Green: {stock.sku}</p>
+                      <p className="text-sm text-orange-700">
+                        Only {formatNumber(stock.total_weight)} kg remaining
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/dashboard/purchasing/orders/new">Order More</Link>
+                    </Button>
+                  </div>
+                ))}
+              {roastedStock
+                .filter(s => s.total_available < 10)
+                .map(stock => (
+                  <div key={stock.product_sku} className="flex items-center justify-between p-3 bg-white rounded-md">
+                    <div>
+                      <p className="font-medium text-orange-900">Roasted: {stock.product_sku}</p>
+                      <p className="text-sm text-orange-700">
+                        Only {formatNumber(stock.total_available)} kg available
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/dashboard/production/batches/new">Roast More</Link>
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -339,7 +387,7 @@ export default function StockOverviewPage() {
                 Roasted Coffee Stock
               </CardTitle>
               <CardDescription>
-                Finished product inventory grouped by roast profile
+                Finished product inventory grouped by product SKU
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" asChild>
@@ -363,7 +411,7 @@ export default function StockOverviewPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Roast Profile</TableHead>
+                  <TableHead>Product SKU</TableHead>
                   <TableHead className="text-right">Available</TableHead>
                   <TableHead className="text-right">Reserved</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -378,8 +426,8 @@ export default function StockOverviewPage() {
                   const isLow = availabilityPercent < 20
 
                   return (
-                    <TableRow key={stock.roast_profile}>
-                      <TableCell className="font-medium">{stock.roast_profile}</TableCell>
+                    <TableRow key={stock.product_sku}>
+                      <TableCell className="font-medium">{stock.product_sku}</TableCell>
                       <TableCell className="text-right">
                         <span className={isLow ? 'text-orange-600 font-semibold' : ''}>
                           {formatNumber(stock.total_available)} kg
@@ -404,7 +452,7 @@ export default function StockOverviewPage() {
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href="/dashboard/production/batches">View</Link>
+                          <Link href={`/dashboard/production/batches?sku=${encodeURIComponent(stock.product_sku)}`}>View</Link>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -415,53 +463,6 @@ export default function StockOverviewPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Low Stock Alerts */}
-      {(greenStock.filter(s => s.total_weight < 50).length > 0 ||
-        roastedStock.filter(s => s.total_available < 10).length > 0) && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-900">
-              <AlertTriangle className="h-5 w-5" />
-              Low Stock Alerts
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {greenStock
-                .filter(s => s.total_weight < 50)
-                .map(stock => (
-                  <div key={stock.sku} className="flex items-center justify-between p-3 bg-white rounded-md">
-                    <div>
-                      <p className="font-medium text-orange-900">Green: {stock.sku}</p>
-                      <p className="text-sm text-orange-700">
-                        Only {formatNumber(stock.total_weight)} kg remaining
-                      </p>
-                    </div>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/dashboard/purchasing/orders/new">Order More</Link>
-                    </Button>
-                  </div>
-                ))}
-              {roastedStock
-                .filter(s => s.total_available < 10)
-                .map(stock => (
-                  <div key={stock.roast_profile} className="flex items-center justify-between p-3 bg-white rounded-md">
-                    <div>
-                      <p className="font-medium text-orange-900">Roasted: {stock.roast_profile}</p>
-                      <p className="text-sm text-orange-700">
-                        Only {formatNumber(stock.total_available)} kg available
-                      </p>
-                    </div>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/dashboard/production/batches/new">Roast More</Link>
-                    </Button>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

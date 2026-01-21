@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Flame, Search, Plus, ArrowLeft } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Flame, Search, Plus, ArrowLeft, X } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +16,8 @@ import type { RoastBatch } from '@/types'
 
 export default function RoastBatchesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const skuFilter = searchParams.get('sku')
   const [batches, setBatches] = useState<RoastBatch[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -39,7 +41,7 @@ export default function RoastBatchesPage() {
       }
 
       const data = await response.json()
-      setBatches(data?.data || [])
+      setBatches(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching batches:', error)
       toast.error('Failed to load roast batches')
@@ -48,20 +50,34 @@ export default function RoastBatchesPage() {
     }
   }
 
-  const filteredBatches = batches.filter((batch) =>
-    batch.batch_number?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredBatches = batches.filter((batch) => {
+    // Filter by SKU if provided
+    if (skuFilter && batch.product_sku !== skuFilter) {
+      return false
+    }
+
+    // Filter by search query
+    if (!searchQuery) return true // Show all batches when no search query
+
+    // Search by batch_number if it exists, otherwise search by ID
+    const searchableText = (batch.batch_number || batch.id).toLowerCase()
+    return searchableText.includes(searchQuery.toLowerCase())
+  })
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'PENDING_ROAST':
         return 'bg-yellow-100 text-yellow-800'
       case 'ROASTED':
+      case 'PENDING_APPROVAL':
         return 'bg-orange-100 text-orange-800'
       case 'QC_PASSED':
+      case 'QC_APPROVED':
         return 'bg-green-100 text-green-800'
       case 'QC_FAILED':
         return 'bg-red-100 text-red-800'
+      case 'IN_PROGRESS':
+        return 'bg-blue-100 text-blue-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -72,11 +88,15 @@ export default function RoastBatchesPage() {
       case 'PENDING_ROAST':
         return 'Pending Roast'
       case 'ROASTED':
-        return 'Roasted'
+      case 'PENDING_APPROVAL':
+        return 'Pending QC'
       case 'QC_PASSED':
+      case 'QC_APPROVED':
         return 'QC Passed'
       case 'QC_FAILED':
         return 'QC Failed'
+      case 'IN_PROGRESS':
+        return 'In Progress'
       default:
         return status
     }
@@ -109,6 +129,21 @@ export default function RoastBatchesPage() {
           <p className="mt-1 text-sm text-gray-600">
             Manage coffee roasting production batches
           </p>
+          {skuFilter && (
+            <div className="mt-2 flex items-center gap-2">
+              <Badge variant="secondary" className="text-sm">
+                Filtered by: {skuFilter}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/dashboard/production/batches')}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear Filter
+              </Button>
+            </div>
+          )}
         </div>
         <Button asChild>
           <Link href="/dashboard/production/batches/new">
@@ -170,6 +205,7 @@ export default function RoastBatchesPage() {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-3 px-4 font-medium text-sm text-gray-700">Batch #</th>
+                    <th className="text-left py-3 px-4 font-medium text-sm text-gray-700">Product SKU</th>
                     <th className="text-left py-3 px-4 font-medium text-sm text-gray-700">Weight In</th>
                     <th className="text-left py-3 px-4 font-medium text-sm text-gray-700">Weight Out</th>
                     <th className="text-left py-3 px-4 font-medium text-sm text-gray-700">Shrinkage</th>
@@ -188,6 +224,9 @@ export default function RoastBatchesPage() {
                         >
                           {batch.batch_number || batch.id.slice(0, 8)}
                         </Link>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-900">
+                        {batch.product_sku || '-'}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900">
                         {batch.weight_in.toFixed(2)} kg

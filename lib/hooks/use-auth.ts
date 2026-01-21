@@ -63,10 +63,15 @@ export function useAuth() {
     } catch (error: any) {
       let errorMessage = 'An error occurred during login'
 
-      if (error.status === 401) {
+      // Handle network errors (fetch failures)
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        errorMessage = 'Network error: Could not connect to server. Please check if the API is running.'
+      } else if (error.status === 401) {
         errorMessage = 'Invalid email or password'
       } else if (error.status === 400) {
         errorMessage = 'Please check your input and try again'
+      } else if (error.data && error.data.error) {
+        errorMessage = error.data.error
       }
 
       toast.error('Login failed', {

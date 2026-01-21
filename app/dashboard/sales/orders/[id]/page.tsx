@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ShoppingBag, Users, Calendar, Truck, Check, X, Package } from 'lucide-react'
+import { ArrowLeft, ShoppingBag, Users, Calendar, Truck, Check, X, Package, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -138,7 +138,18 @@ export default function SalesOrderDetailPage() {
 
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.error || 'Failed to confirm order')
+        const errorMsg = data.error || 'Failed to confirm order'
+
+        // Check if it's an inventory issue
+        if (errorMsg.includes('insufficient inventory') || errorMsg.includes('could not reserve')) {
+          toast.error(errorMsg, {
+            description: 'Tip: Make sure your roasted coffee batches have passed QC. Only QC-passed batches are available for sale.',
+            duration: 8000
+          })
+          throw new Error(errorMsg)
+        }
+
+        throw new Error(errorMsg)
       }
 
       toast.success('Order confirmed successfully. Inventory reserved.')
@@ -148,7 +159,9 @@ export default function SalesOrderDetailPage() {
       fetchStatusHistory()
     } catch (error: any) {
       console.error('Error confirming order:', error)
-      toast.error(error.message || 'Failed to confirm order')
+      if (!error.message.includes('insufficient inventory')) {
+        toast.error(error.message || 'Failed to confirm order')
+      }
     } finally {
       setProcessing(false)
     }
@@ -319,6 +332,21 @@ export default function SalesOrderDetailPage() {
         </div>
         {isAccountantOrAdmin && (
           <div className="flex gap-2">
+            {(order.status === 'SHIPPED' || order.status === 'DELIVERED') && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (order.status !== 'CONFIRMED' && order.status !== 'PREPARING' && order.status !== 'SHIPPED' && order.status !== 'DELIVERED') {
+                    toast.error('Cannot generate invoice: Order must be confirmed first')
+                    return
+                  }
+                  window.location.href = `/dashboard/sales/invoices/new?so_id=${order.id}`
+                }}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Generate Invoice
+              </Button>
+            )}
             {canConfirm && (
               <Button onClick={() => setConfirmDialogOpen(true)}>
                 <Check className="mr-2 h-4 w-4" />

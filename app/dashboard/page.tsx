@@ -123,7 +123,7 @@ export default function DashboardPage() {
         fetch(`${env.apiBase}/api/v1/inventory/lots`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }).catch(() => ({ ok: false })),
-        fetch(`${env.apiBase}/api/v1/production/batches`, {
+        fetch(`${env.apiBase}/api/v1/roast-batches`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }).catch(() => ({ ok: false })),
         fetch(`${env.apiBase}/api/v1/finance/indirect-costs`, {
@@ -157,10 +157,10 @@ export default function DashboardPage() {
 
       if (batchesRes.ok && 'json' in batchesRes) {
         const batchesData = await batchesRes.json()
-        const batches = batchesData.data || []
+        const batches = Array.isArray(batchesData) ? batchesData : (batchesData.data || [])
         newStats.roastBatches = batches.length
         newStats.roastedStock = batches
-          .filter((b: any) => b.status === 'QC_PASSED')
+          .filter((b: any) => b.status === 'QC_PASSED' || b.status === 'QC_APPROVED')
           .reduce((sum: number, batch: any) => sum + (batch.weight_out || 0), 0)
 
         newStats.pendingBatches = batches.filter((b: any) =>
@@ -290,11 +290,13 @@ export default function DashboardPage() {
       case 'SENT':
         return 'bg-yellow-100 text-yellow-800'
       case 'ROASTED':
+      case 'PENDING_APPROVAL':
       case 'IN_PROGRESS':
       case 'CONFIRMED':
       case 'PREPARING':
         return 'bg-blue-100 text-blue-800'
       case 'QC_PASSED':
+      case 'QC_APPROVED':
       case 'COMPLETED':
       case 'DELIVERED':
         return 'bg-green-100 text-green-800'
@@ -379,17 +381,29 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Low Stock Alert */}
-      {stats.lowStockLots > 0 && (
-        <Alert className="bg-yellow-50 border-yellow-200">
-          <AlertTriangle className="h-4 w-4 text-yellow-600" />
-          <AlertDescription className="ml-2">
-            <span className="font-semibold text-yellow-900">Low Stock Alert:</span>
-            <span className="text-yellow-800 ml-1">
-              {stats.lowStockLots} lot(s) have less than 50kg remaining
-            </span>
-          </AlertDescription>
-        </Alert>
+      {/* Low Stock Alerts */}
+      {lowStockLots.length > 0 && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-900">
+              <AlertTriangle className="h-5 w-5" />
+              Low Stock Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {lowStockLots.map((lot) => (
+                <div key={lot.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-yellow-200">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{lot.sku}</p>
+                    <p className="text-xs text-gray-500">Only {formatNumber(lot.current_weight)} kg remaining</p>
+                  </div>
+                  <Badge className="bg-yellow-100 text-yellow-800">Low Stock</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Quick Actions - TOP SECTION */}
@@ -687,31 +701,6 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
-
-      {/* Low Stock Alerts */}
-      {lowStockLots.length > 0 && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-yellow-900">
-              <AlertTriangle className="h-5 w-5" />
-              Low Stock Alerts
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {lowStockLots.map((lot) => (
-                <div key={lot.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-yellow-200">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{lot.sku}</p>
-                    <p className="text-xs text-gray-500">Only {formatNumber(lot.current_weight)} kg remaining</p>
-                  </div>
-                  <Badge className="bg-yellow-100 text-yellow-800">Low Stock</Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

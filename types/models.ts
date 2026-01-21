@@ -286,3 +286,83 @@ export interface ClientSalesStats {
   total_amount: number
   active_orders: number
 }
+
+// Invoice Models
+
+export type PaymentStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE'
+
+export interface PurchaseInvoice {
+  id: string
+  tenant_id: string
+  invoice_number: string
+  purchase_order_id?: string
+  supplier_id: string
+  supplier?: Supplier
+  invoice_date: string
+  due_date: string
+  payment_terms_days: number
+  subtotal_amount: number
+  tax_amount: number
+  total_amount: number
+  payment_status: PaymentStatus
+  paid_amount: number
+  payment_method?: string
+  payment_date?: string
+  payment_reference?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+  created_by: string
+  updated_by: string
+  items?: PurchaseInvoiceItem[]
+}
+
+export interface PurchaseInvoiceItem {
+  id: string
+  invoice_id: string
+  product_sku: string
+  product_name: string
+  quantity: number
+  unit_price: number
+  line_total: number
+  notes?: string
+  created_at: string
+}
+
+export interface SalesInvoice {
+  id: string
+  tenant_id: string
+  invoice_number: string
+  sales_order_id?: string
+  client_id: string
+  client?: Client
+  invoice_date: string
+  due_date: string
+  payment_terms_days: number
+  subtotal_amount: number
+  tax_amount: number
+  total_amount: number
+  payment_status: PaymentStatus
+  paid_amount: number
+  payment_method?: string
+  payment_date?: string
+  payment_reference?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+  created_by: string
+  updated_by: string
+  items?: SalesInvoiceItem[]
+}
+
+export interface SalesInvoiceItem {
+  id: string
+  invoice_id: string
+  product_sku: string
+  product_name: string
+  quantity: number
+  unit_price: number
+  line_total: number
+  notes?: string
+  created_at: string
+}

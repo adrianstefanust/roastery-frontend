@@ -22,7 +22,9 @@ const finishRoastingSchema = z.object({
   weight_out: z.string().refine(
     (val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0,
     'Weight must be a positive number'
-  )
+  ),
+  qc_passed: z.string().min(1, 'Please select QC status'),
+  qc_notes: z.string().optional()
 })
 
 const submitQCSchema = z.object({
@@ -111,11 +113,18 @@ export default function BatchDetailPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to fetch batch')
+        const errorData = await response.json()
+        if (response.status === 403) {
+          toast.error(`Access denied: ${errorData.error || 'You do not have permission to view this batch'}`)
+        } else {
+          toast.error(errorData.error || 'Failed to fetch batch')
+        }
+        router.push('/dashboard/production/batches')
+        return
       }
 
       const data = await response.json()
-      setBatch(data.data)
+      setBatch(data)
     } catch (error) {
       console.error('Error fetching batch:', error)
       toast.error('Failed to load batch details')
@@ -129,7 +138,8 @@ export default function BatchDetailPage() {
     try {
       setSubmitting(true)
 
-      const response = await fetch(`${env.apiBase}/api/v1/roast-batches/${batchId}`, {
+      // Step 1: Finish roasting
+      const finishResponse = await fetch(`${env.apiBase}/api/v1/roast-batches/${batchId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -140,18 +150,57 @@ export default function BatchDetailPage() {
         })
       })
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to finish roasting')
+      if (!finishResponse.ok) {
+        const errorData = await finishResponse.json()
+        if (finishResponse.status === 403) {
+          toast.error(`Access denied: ${errorData.error || 'You do not have permission to finish roasting batches'}`)
+        } else {
+          toast.error(errorData.error || 'Failed to finish roasting')
+        }
+        return
       }
 
-      toast.success('Roasting completed successfully!')
+      // Step 2: Submit QC if user selected a status
+      if (data.qc_passed) {
+        const qcPassed = data.qc_passed === 'true'
+        const qcResponse = await fetch(`${env.apiBase}/api/v1/roast-batches/${batchId}/qc`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            aroma: qcPassed ? 8.0 : 5.0,
+            flavor: qcPassed ? 8.0 : 5.0,
+            aftertaste: qcPassed ? 8.0 : 5.0,
+            acidity: qcPassed ? 8.0 : 5.0,
+            body: qcPassed ? 8.0 : 5.0,
+            notes: data.qc_notes || (qcPassed ? 'Quality approved during roasting' : 'Quality issues detected')
+          })
+        })
+
+        if (!qcResponse.ok) {
+          const errorData = await qcResponse.json()
+          toast.error(`Roasting completed but QC submission failed: ${errorData.error}`)
+          await fetchBatch()
+          return
+        }
+
+        toast.success(`Roasting completed and marked as ${qcPassed ? 'QC Passed' : 'QC Failed'}!`)
+      } else {
+        toast.success('Roasting completed successfully!')
+      }
+
       setFinishDialogOpen(false)
       finishRoastingForm.reset()
       await fetchBatch() // Refresh batch data
     } catch (error) {
       console.error('Error finishing roasting:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to finish roasting')
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        toast.error('Network error: Could not connect to server. Please check if the API is running.')
+      } else {
+        toast.error(error instanceof Error ? error.message : 'Failed to finish roasting')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -178,8 +227,13 @@ export default function BatchDetailPage() {
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to submit QC')
+        const errorData = await response.json()
+        if (response.status === 403) {
+          toast.error(`Access denied: ${errorData.error || 'You do not have permission to submit QC'}`)
+        } else {
+          toast.error(errorData.error || 'Failed to submit QC')
+        }
+        return
       }
 
       toast.success('Quality control submitted successfully!')
@@ -188,7 +242,11 @@ export default function BatchDetailPage() {
       await fetchBatch() // Refresh batch data
     } catch (error) {
       console.error('Error submitting QC:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to submit QC')
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        toast.error('Network error: Could not connect to server. Please check if the API is running.')
+      } else {
+        toast.error(error instanceof Error ? error.message : 'Failed to submit QC')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -199,11 +257,15 @@ export default function BatchDetailPage() {
       case 'PENDING_ROAST':
         return 'bg-yellow-100 text-yellow-800'
       case 'ROASTED':
+      case 'PENDING_APPROVAL':
         return 'bg-orange-100 text-orange-800'
       case 'QC_PASSED':
+      case 'QC_APPROVED':
         return 'bg-green-100 text-green-800'
       case 'QC_FAILED':
         return 'bg-red-100 text-red-800'
+      case 'IN_PROGRESS':
+        return 'bg-blue-100 text-blue-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -214,11 +276,15 @@ export default function BatchDetailPage() {
       case 'PENDING_ROAST':
         return 'Pending Roast'
       case 'ROASTED':
-        return 'Roasted'
+      case 'PENDING_APPROVAL':
+        return 'Pending QC'
       case 'QC_PASSED':
+      case 'QC_APPROVED':
         return 'QC Passed'
       case 'QC_FAILED':
         return 'QC Failed'
+      case 'IN_PROGRESS':
+        return 'In Progress'
       default:
         return status
     }
@@ -227,6 +293,17 @@ export default function BatchDetailPage() {
   const calculateShrinkage = () => {
     if (!batch || !batch.weight_out || batch.weight_out === 0) return null
     return ((batch.weight_in - batch.weight_out) / batch.weight_in) * 100
+  }
+
+  const formatDate = (dateString: string | null | undefined, formatStr: string = 'MMM d, yyyy HH:mm') => {
+    if (!dateString) return 'N/A'
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return 'Invalid date'
+      return format(date, formatStr)
+    } catch {
+      return 'Invalid date'
+    }
   }
 
   if (loading) {
@@ -332,7 +409,7 @@ export default function BatchDetailPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Created</p>
                 <p className="mt-2 text-lg font-semibold text-gray-900">
-                  {format(new Date(batch.created_at), 'MMM d, yyyy')}
+                  {formatDate(batch.created_at, 'MMM d, yyyy')}
                 </p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -390,20 +467,20 @@ export default function BatchDetailPage() {
               <div>
                 <h3 className="text-sm font-medium text-gray-500 mb-1">Roasted At</h3>
                 <p className="text-sm text-gray-900">
-                  {format(new Date(batch.roasted_at), 'MMM d, yyyy HH:mm')}
+                  {formatDate(batch.roasted_at)}
                 </p>
               </div>
             )}
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-1">Created At</h3>
               <p className="text-sm text-gray-900">
-                {format(new Date(batch.created_at), 'MMM d, yyyy HH:mm')}
+                {formatDate(batch.created_at)}
               </p>
             </div>
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-1">Last Updated</h3>
               <p className="text-sm text-gray-900">
-                {format(new Date(batch.updated_at), 'MMM d, yyyy HH:mm')}
+                {formatDate(batch.updated_at)}
               </p>
             </div>
           </div>
@@ -486,6 +563,47 @@ export default function BatchDetailPage() {
               )}
               <p className="text-xs text-gray-500">
                 Weight in: {batch?.weight_in.toFixed(2)} kg
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="qc_passed">
+                Quality Control Status <span className="text-red-500">*</span>
+              </Label>
+              <select
+                id="qc_passed"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                {...finishRoastingForm.register('qc_passed')}
+                disabled={submitting}
+              >
+                <option value="">Select QC Status</option>
+                <option value="true">QC Passed ✓</option>
+                <option value="false">QC Failed ✗</option>
+              </select>
+              {finishRoastingForm.formState.errors.qc_passed && (
+                <p className="text-sm text-red-600">
+                  {finishRoastingForm.formState.errors.qc_passed.message}
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                Choose whether this batch passes quality control
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="qc_notes">
+                QC Notes (Optional)
+              </Label>
+              <textarea
+                id="qc_notes"
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Any quality notes or observations..."
+                {...finishRoastingForm.register('qc_notes')}
+                disabled={submitting}
+              />
+              <p className="text-xs text-gray-500">
+                Optional notes about the roast quality
               </p>
             </div>
 

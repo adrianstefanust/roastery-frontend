@@ -187,6 +187,7 @@ export default function NewPurchaseOrderPage() {
 
       const orderData = {
         ...form,
+        expected_delivery_date: form.expected_delivery_date || undefined,
         status,
         total_amount: calculateGrandTotal(),
         items: validItems
